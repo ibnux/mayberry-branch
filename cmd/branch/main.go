@@ -850,7 +850,7 @@ func main() {
 	if *serverURL != "" {
 		cfg.ServerURL = *serverURL
 	}
-	if *port != 0 {
+	if setFlags["port"] {
 		cfg.Port = *port
 	}
 
@@ -1533,12 +1533,12 @@ var plistTemplate = template.Must(template.New("plist").Parse(`<?xml version="1.
 `))
 
 var systemdTemplate = template.Must(template.New("unit").Parse(`[Unit]
-Description=Mayberry Branch Daemon
+Description=Mayberry Branch Daemon ({{ .Name }})
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart={{ .ExecPath }} --daemon
+ExecStart={{ .ExecPath }} --daemon -name {{ .Name }}
 Restart=on-failure
 RestartSec=5
 
@@ -1645,6 +1645,7 @@ func installSystemdUnit(execPath string) error {
 	var buf bytes.Buffer
 	if err := systemdTemplate.Execute(&buf, map[string]string{
 		"ExecPath": execPath,
+		"Name":     config.Instance(),
 	}); err != nil {
 		return err
 	}
