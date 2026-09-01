@@ -218,7 +218,7 @@ type CatalogEntry struct {
 // NewServer creates the Branch local HTTP server.
 func NewServer(branchID, libraryDir string) *Server {
 	home, _ := os.UserHomeDir()
-	coverDir := filepath.Join(home, ".mayberry", "covers")
+	coverDir := filepath.Join(home, ".mayberry", config.Instance()+"_cover")
 	os.MkdirAll(coverDir, 0755)
 
 	s := &Server{

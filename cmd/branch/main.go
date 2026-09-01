@@ -769,7 +769,28 @@ func splitCSV(s string) []string {
 // Version is set at build time via -ldflags.
 var Version = "dev"
 
+// nameFromArgs extracts the -name flag value from os.Args before flag.Parse,
+// so subcommands (e.g. "service install") also know the instance name.
+func nameFromArgs() string {
+	for i, a := range os.Args {
+		if (a == "-name" || a == "--name") && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
+		if strings.HasPrefix(a, "-name=") {
+			return strings.TrimPrefix(a, "-name=")
+		}
+		if strings.HasPrefix(a, "--name=") {
+			return strings.TrimPrefix(a, "--name=")
+		}
+	}
+	return ""
+}
+
 func main() {
+	// Scope on-disk files (config, covers, systemd unit) by instance name
+	// so multiple branches can run side-by-side. Derived from -name.
+	config.SetInstance(nameFromArgs())
+
 	// Subcommand handling
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -1245,7 +1266,7 @@ func scheduleRestart() {
 			exec.Command("sh", "-c", script).Start()
 		}
 	case "linux":
-		script := fmt.Sprintf("sleep 2 && systemctl --user restart %s", linuxUnit)
+		script := fmt.Sprintf("sleep 2 && systemctl --user restart %s", linuxUnitName())
 		exec.Command("sh", "-c", script).Start()
 	case "windows":
 		return
@@ -1407,7 +1428,7 @@ func handleUpdate() {
 		upath := linuxUnitPath()
 		if _, err := os.Stat(upath); err == nil {
 			fmt.Println("Restarting background service...")
-			exec.Command("systemctl", "--user", "restart", linuxUnit).Run()
+			exec.Command("systemctl", "--user", "restart", linuxUnitName()).Run()
 			fmt.Println("Service restarted.")
 		}
 	}
@@ -1472,16 +1493,20 @@ func branchDeregister() error {
 // ---------------------------------------------------------------------------
 
 const (
-	macLabel    = "com.sofriendly.mayberry"
-	linuxUnit   = "mayberry-branch.service"
+	macLabel = "com.sofriendly.mayberry"
 )
 
 func macPlistPath() string {
 	return filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", macLabel+".plist")
 }
 
+// linuxUnitName returns the per-instance systemd unit name.
+func linuxUnitName() string {
+	return "mayberry-" + config.Instance() + ".service"
+}
+
 func linuxUnitPath() string {
-	return filepath.Join(os.Getenv("HOME"), ".config", "systemd", "user", linuxUnit)
+	return filepath.Join(os.Getenv("HOME"), ".config", "systemd", "user", linuxUnitName())
 }
 
 var plistTemplate = template.Must(template.New("plist").Parse(`<?xml version="1.0" encoding="UTF-8"?>
@@ -1629,12 +1654,12 @@ func installSystemdUnit(execPath string) error {
 
 	// Reload and enable
 	exec.Command("systemctl", "--user", "daemon-reload").Run()
-	if out, err := exec.Command("systemctl", "--user", "enable", "--now", linuxUnit).CombinedOutput(); err != nil {
+	if out, err := exec.Command("systemctl", "--user", "enable", "--now", linuxUnitName()).CombinedOutput(); err != nil {
 		fmt.Printf("Unit written to %s\n", upath)
 		return fmt.Errorf("systemctl enable: %s — %w", strings.TrimSpace(string(out)), err)
 	}
 	fmt.Printf("Service installed and started: %s\n", upath)
-	fmt.Println("View logs: journalctl --user -u mayberry-branch -f")
+	fmt.Printf("View logs: journalctl --user -u %s -f\n", linuxUnitName())
 	return nil
 }
 
@@ -1644,7 +1669,7 @@ func uninstallSystemdUnit() error {
 		return fmt.Errorf("service not installed (no unit at %s)", upath)
 	}
 	// Stop and disable (ignore errors — may already be stopped)
-	exec.Command("systemctl", "--user", "disable", "--now", linuxUnit).Run()
+	exec.Command("systemctl", "--user", "disable", "--now", linuxUnitName()).Run()
 	if err := os.Remove(upath); err != nil {
 		return err
 	}

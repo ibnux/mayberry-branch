@@ -100,6 +100,26 @@ func Sanitize(name string) string {
 	return s
 }
 
+// instanceName scopes this instance's on-disk files (config, cover cache,
+// systemd unit). Defaults to "branch" so a bare `mayberry` invocation keeps
+// using branch.json / mayberry-branch.service (backward compatible).
+var instanceName = "branch"
+
+// SetInstance sets the instance name (normally from the -name flag). An
+// empty name falls back to "branch" for backward compatibility.
+func SetInstance(name string) {
+	name = Sanitize(name)
+	if name == "" {
+		name = "branch"
+	}
+	instanceName = name
+}
+
+// Instance returns the current instance name.
+func Instance() string {
+	return instanceName
+}
+
 func configDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -115,7 +135,7 @@ func LoadBranch() (*BranchConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(dir, "branch.json")
+	path := filepath.Join(dir, instanceName+".json")
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -165,5 +185,5 @@ func SaveBranch(cfg *BranchConfig) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "branch.json"), data, 0600)
+	return os.WriteFile(filepath.Join(dir, instanceName+".json"), data, 0600)
 }
