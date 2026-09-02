@@ -49,6 +49,23 @@ Mayberry installs as a background service and runs automatically on login.
 
 Open `http://localhost:1950/settings` anytime to change your branch name or library folder.
 
+### Multiple Instances
+
+Run several branches side-by-side on the same machine by giving each a unique
+`-name` (and, when needed, a unique `-port`). Each instance keeps its own
+on-disk files:
+
+- `~/.mayberry/<name>.json` — config
+- `~/.mayberry/<name>_cover/` — cover cache
+- `~/.config/systemd/user/mayberry-<name>.service` — systemd unit (Linux)
+
+```sh
+mayberry -name scifi -library ebook/                  # port 1950 → scifi.branch.pub
+mayberry -name history -library history/ -port 1951   # port 1951 → history.branch.pub
+```
+
+Each instance registers its own subdomain on the network.
+
 ## How It Works
 
 Your branch connects **outbound** to the Mayberry network through an encrypted WebSocket tunnel. No ports are opened on your machine. Your IP is never exposed.
@@ -89,16 +106,38 @@ No file contents are uploaded — only metadata is shared with the catalog.
 
 ## Configuration
 
-Config is stored at `~/.mayberry/branch.json`.
+Config is stored per-instance at `~/.mayberry/<name>.json` (falls back to
+`~/.mayberry/branch.json` when `-name` is not set).
 
 | Flag | Env Var | Default | Description |
 |------|---------|---------|-------------|
 | `-library` | `MAYBERRY_LIBRARY` | — | EPUB library folder |
-| `-name` | — | auto-generated | Branch display name |
+| `-name` | — | auto-generated | Branch display name (also the instance name) |
 | `-server` | `MAYBERRY_SERVER` | `https://mayberry.pub` | Catalog server |
 | `-hub` | `MAYBERRY_HUB` | `https://branch.pub` | Tunnel server |
 | `-port` | — | `1950` | Local dashboard port |
 | `--daemon` | — | `false` | Run without TUI |
+| `--auto-update` | — | `false` | Automatically update to the latest release |
+
+## Managing the Service (Linux systemd)
+
+Mayberry runs as a **user** systemd service — no `sudo` required. The unit is
+named `mayberry-<name>.service`.
+
+| Action | Command |
+|--------|---------|
+| Check status | `systemctl --user status mayberry-<name>.service` |
+| List all mayberry services | `systemctl --user list-units --type=service \| grep mayberry` |
+| Restart | `systemctl --user restart mayberry-<name>.service` |
+| Stop | `systemctl --user stop mayberry-<name>.service` |
+| Start | `systemctl --user start mayberry-<name>.service` |
+| View logs (follow) | `journalctl --user -u mayberry-<name>.service -f` |
+
+```sh
+systemctl --user status mayberry-scifi.service mayberry-history.service
+systemctl --user restart mayberry-history.service
+journalctl --user -u mayberry-scifi.service -f
+```
 
 ## License
 
