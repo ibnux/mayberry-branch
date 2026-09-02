@@ -769,6 +769,11 @@ func splitCSV(s string) []string {
 // Version is set at build time via -ldflags.
 var Version = "dev"
 
+// autoUpdateEnabled controls the automatic update loop. Defaults to false
+// (opt-in via --auto-update) so forks/custom builds aren't silently
+// overwritten by upstream releases.
+var autoUpdateEnabled = false
+
 // nameFromArgs extracts the -name flag value from os.Args before flag.Parse,
 // so subcommands (e.g. "service install") also know the instance name.
 func nameFromArgs() string {
@@ -809,15 +814,13 @@ func main() {
 		}
 	}
 
-	// Check for updates in the background (non-blocking).
-	go checkForUpdate()
-
 	libraryDir := flag.String("library", envOr("MAYBERRY_LIBRARY", ""), "path to epub library folder")
 	displayName := flag.String("name", "", "display name (auto-generates friendly-id if empty)")
 	serverURL := flag.String("server", envOr("MAYBERRY_SERVER", config.DefaultServerURL), "Town Square server URL")
 	hubURL := flag.String("hub", envOr("MAYBERRY_HUB", config.DefaultHubURL), "tunnel hub URL")
 	port := flag.Int("port", 1950, "local HTTP port")
 	daemon := flag.Bool("daemon", false, "run in background without TUI")
+	autoUpdate := flag.Bool("auto-update", false, "enable automatic updates (default false)")
 
 	// Network mirror flags — see MIRROR.md. Empty string / unset bool means
 	// "leave config value alone"; only flags the user explicitly passed take
@@ -834,6 +837,9 @@ func main() {
 	// for flags that were explicitly passed.
 	setFlags := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) { setFlags[f.Name] = true })
+	autoUpdateEnabled = *autoUpdate
+	// Check for updates in the background (non-blocking); respects --auto-update.
+	go checkForUpdate()
 
 	// Load or create config
 	cfg, err := config.LoadBranch()
@@ -1047,6 +1053,9 @@ func printStatus(cfg *config.BranchConfig) {
 }
 
 func autoUpdateLoop(ctx context.Context, alog *activityLog) {
+	if !autoUpdateEnabled {
+		return
+	}
 	if Version == "dev" {
 		return
 	}
@@ -1276,6 +1285,9 @@ func scheduleRestart() {
 }
 
 func checkForUpdate() {
+	if !autoUpdateEnabled {
+		return
+	}
 	if Version == "dev" {
 		return
 	}
